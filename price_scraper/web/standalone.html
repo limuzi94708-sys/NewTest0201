@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电商价格采集与对比工具 - 独立演示版</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        .header h1 { font-size: 2.5rem; margin-bottom: 10px; }
+        .header p { font-size: 1.1rem; opacity: 0.9; }
+        .search-box {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .search-form { display: flex; gap: 15px; flex-wrap: wrap; align-items: center; }
+        .search-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 15px 20px;
+            font-size: 1.1rem;
+            border: 2px solid #e8e8e8;
+            border-radius: 10px;
+        }
+        .search-input:focus { outline: none; border-color: #667eea; }
+        .platforms { display: flex; gap: 10px; flex-wrap: wrap; }
+        .platform-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 8px 15px;
+            background: #f5f5f5;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+        .platform-checkbox.checked { background: #667eea; color: white; }
+        .sort-select { padding: 12px 20px; font-size: 1rem; border: 2px solid #e8e8e8; border-radius: 10px; }
+        .search-btn {
+            padding: 15px 40px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+        .search-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102,126,234,0.4); }
+        .loading { display: none; text-align: center; padding: 40px; }
+        .loading.show { display: block; }
+        .spinner {
+            width: 50px; height: 50px;
+            border: 4px solid rgba(102,126,234,0.2);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .summary {
+            background: white;
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .summary h3 { color: #333; margin-bottom: 15px; }
+        .summary-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea20 0%, #764ba220 100%);
+            border-radius: 10px;
+        }
+        .stat-value { font-size: 1.8rem; font-weight: 700; color: #667eea; }
+        .stat-label { color: #666; font-size: 0.9rem; margin-top: 5px; }
+        .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 30px; margin-bottom: 30px; }
+        .chart-card { background: white; border-radius: 16px; padding: 25px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+        .chart-card h3 { color: #333; margin-bottom: 20px; }
+        .chart-container { position: relative; height: 300px; }
+        .table-section { background: white; border-radius: 16px; padding: 25px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); margin-bottom: 30px; }
+        .table-section h3 { color: #333; margin-bottom: 20px; }
+        .product-table { width: 100%; border-collapse: collapse; }
+        .product-table th { background: #f5f5f5; padding: 12px 15px; text-align: left; font-weight: 600; color: #333; }
+        .product-table td { padding: 12px 15px; border-bottom: 1px solid #f0f0f0; }
+        .product-table tr:hover { background: #fafafa; }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 0.85rem; font-weight: 500; }
+        .badge-strong { background: #d4edda; color: #155724; }
+        .badge-recommend { background: #cce5ff; color: #004085; }
+        .badge-normal { background: #fff3cd; color: #856404; }
+        .badge-not { background: #f8d7da; color: #721c24; }
+        .platform-tag { display: inline-block; padding: 3px 8px; background: #e8e8e8; border-radius: 4px; font-size: 0.8rem; }
+        .price-trend { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 15px; }
+        .trend-item { background: #f5f5f5; padding: 10px 15px; border-radius: 8px; }
+        .trend-platform { font-weight: 600; color: #667eea; }
+        .trend-price { color: #333; margin-top: 5px; }
+        .demo-notice { background: #e7f3ff; border: 1px solid #b3d8ff; color: #0066cc; padding: 15px 20px; border-radius: 10px; margin-bottom: 20px; }
+        .footer { text-align: center; color: white; opacity: 0.8; margin-top: 30px; }
+        .notice-banner { background: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; }
+        @media (max-width: 768px) {
+            .charts-grid { grid-template-columns: 1fr; }
+            .header h1 { font-size: 1.8rem; }
+            .product-table { font-size: 0.85rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>电商价格采集与对比工具</h1>
+            <p>支持京东、淘宝、拼多多、天猫多平台比价，智能推荐高性价比商品</p>
+        </div>
+
+        <div class="notice-banner">
+            <strong>独立演示版本</strong> - 此为纯前端演示版本，数据为模拟数据。运行完整功能请使用 <code>run.bat</code> 或 <code>run.sh</code> 启动服务。
+        </div>
+
+        <div class="search-box">
+            <div class="demo-notice">
+                <strong>演示模式：</strong>当前显示示例数据。输入关键词并点击搜索查看模拟采集结果。
+            </div>
+            <div class="search-form">
+                <input type="text" class="search-input" id="keywordInput" placeholder="输入商品关键词" value="手机">
+                <div class="platforms">
+                    <label class="platform-checkbox checked"><input type="checkbox" value="京东" checked> 京东</label>
+                    <label class="platform-checkbox checked"><input type="checkbox" value="淘宝" checked> 淘宝</label>
+                    <label class="platform-checkbox checked"><input type="checkbox" value="拼多多" checked> 拼多多</label>
+                    <label class="platform-checkbox checked"><input type="checkbox" value="天猫" checked> 天猫</label>
+                </div>
+                <select class="sort-select" id="sortSelect">
+                    <option value="price">按价格排序</option>
+                    <option value="sales">按销量排序</option>
+                    <option value="score">按评分排序</option>
+                    <option value="value">按性价比排序</option>
+                </select>
+                <button class="search-btn" id="searchBtn" onclick="performSearch()">搜索采集</button>
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>正在模拟采集数据...</p>
+        </div>
+
+        <div id="resultsContent" style="display: none;">
+            <div class="summary">
+                <h3>采集摘要</h3>
+                <div class="summary-stats" id="summaryStats"></div>
+                <div class="price-trend" id="priceTrend"></div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3>价格对比图</h3>
+                    <div class="chart-container"><canvas id="priceChart"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h3>销量排行榜</h3>
+                    <div class="chart-container"><canvas id="salesChart"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h3>平台综合对比</h3>
+                    <div class="chart-container"><canvas id="platformChart"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h3>性价比雷达图</h3>
+                    <div class="chart-container"><canvas id="radarChart"></canvas></div>
+                </div>
+            </div>
+
+            <div class="table-section">
+                <h3>商品详细列表</h3>
+                <table class="product-table">
+                    <thead>
+                        <tr>
+                            <th>排名</th><th>商品名称</th><th>平台</th><th>价格</th><th>销量</th><th>评分</th><th>性价比</th><th>推荐</th><th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>电商价格采集与对比工具 v1.0 | 数据仅供参考，请以实际价格为准</p>
+        </div>
+    </div>
+
+    <script>
+        let currentData = null;
+        let charts = {};
+        const productTemplates = [
+            {name: "小米14 Pro 骁龙8 Gen3 旗舰手机", base: 4999},
+            {name: "vivo X100 Pro 蔡司镜头 拍照手机", base: 5499},
+            {name: "OPPO Find X7 Ultra 哈苏影像旗舰", base: 5999},
+            {name: "华为Mate 60 Pro 麒麟芯片 5G手机", base: 6999},
+            {name: "Apple iPhone 15 Pro 256GB 5G手机", base: 7999},
+            {name: "荣耀Magic5 Pro 骁龙8 Gen2", base: 4699},
+            {name: "三星Galaxy S24 Ultra AI手机", base: 9699},
+            {name: "联想拯救者R9000P 游戏笔记本", base: 8999},
+            {name: "戴尔游匣G15 酷睿i7 游戏本", base: 7599},
+            {name: "索尼WH-1000XM5 降噪耳机", base: 2499},
+            {name: "AirPods Pro 2 代蓝牙耳机", base: 1799},
+            {name: "戴森V15吸尘器 智能无绳", base: 5499}
+        ];
+
+        document.querySelectorAll('.platform-checkbox').forEach(cb => {
+            cb.addEventListener('click', function() {
+                this.classList.toggle('checked');
+                this.querySelector('input').checked = this.classList.contains('checked');
+            });
+        });
+
+        window.addEventListener('DOMContentLoaded', () => renderDemo());
+
+        function generateMockData(keyword) {
+            const platforms = ["京东", "淘宝", "拼多多", "天猫"];
+            const products = [];
+            const matchedTemplates = productTemplates.filter(t =>
+                t.name.toLowerCase().includes(keyword.toLowerCase()) ||
+                keyword.toLowerCase().split(' ').some(k => t.name.toLowerCase().includes(k))
+            );
+            const templates = matchedTemplates.length > 0 ? matchedTemplates : productTemplates.slice(0, 6);
+
+            templates.forEach((t, i) => {
+                platforms.forEach(p => {
+                    const priceMultipliers = {京东: 1.05, 淘宝: 0.95, 拼多多: 0.88, 天猫: 1.02};
+                    const price = Math.round(t.base * priceMultipliers[p] * (0.9 + Math.random() * 0.2));
+                    products.push({
+                        id: `p${i}_${p}`,
+                        name: t.name,
+                        platform: p,
+                        price: price,
+                        sales: Math.floor(Math.random() * 40000) + 5000,
+                        shop_score: (4 + Math.random()).toFixed(1),
+                        url: `#${p}${t.name}`,
+                        price_rank: 0,
+                        sales_rank: 0,
+                        value_score: Math.floor(Math.random() * 30) + 70,
+                        recommendation: "强烈推荐",
+                        price_from_avg: Math.round((Math.random() - 0.5) * 40)
+                    });
+                });
+            });
+
+            // 计算排名
+            products.sort((a, b) => a.price - b.price);
+            products.forEach((p, i) => p.price_rank = i + 1);
+            products.sort((a, b) => b.sales - a.sales);
+            products.forEach((p, i) => p.sales_rank = i + 1);
+
+            products.forEach(p => {
+                if (p.value_score >= 90) p.recommendation = "强烈推荐";
+                else if (p.value_score >= 80) p.recommendation = "推荐";
+                else if (p.value_score >= 70) p.recommendation = "一般";
+                else p.recommendation = "不推荐";
+            });
+
+            const priceTrend = {};
+            platforms.forEach(p => {
+                const pProducts = products.filter(pr => pr.platform === p);
+                const prices = pProducts.map(pr => pr.price);
+                priceTrend[p] = {min: Math.min(...prices), max: Math.max(...prices), avg: Math.round(prices.reduce((a,b) => a+b, 0)/prices.length)};
+            });
+
+            return {
+                keyword,
+                total_products: products.length,
+                platforms,
+                generated_at: new Date().toLocaleString('zh-CN'),
+                price_trend: priceTrend,
+                products
+            };
+        }
+
+        function renderDemo() {
+            const result = generateMockData("手机");
+            renderResults(result);
+        }
+
+        function performSearch() {
+            const keyword = document.getElementById('keywordInput').value.trim() || "手机";
+            const sortBy = document.getElementById('sortSelect').value;
+
+            showLoading(true);
+            setTimeout(() => {
+                let result = generateMockData(keyword);
+                if (sortBy === 'sales') result.products.sort((a, b) => b.sales - a.sales);
+                else if (sortBy === 'score') result.products.sort((a, b) => b.shop_score - a.shop_score);
+                else if (sortBy === 'value') result.products.sort((a, b) => b.value_score - a.value_score);
+                else result.products.sort((a, b) => a.price - b.price);
+                renderResults(result);
+                showLoading(false);
+            }, 800);
+        }
+
+        function renderResults(result) {
+            currentData = result;
+            document.getElementById('resultsContent').style.display = 'block';
+            document.querySelector('.demo-notice').style.display = 'none';
+
+            // Summary
+            const minPrice = Math.min(...result.products.map(p => p.price));
+            const maxPrice = Math.max(...result.products.map(p => p.price));
+            document.getElementById('summaryStats').innerHTML = `
+                <div class="stat-item"><div class="stat-value">${result.total_products}</div><div class="stat-label">商品总数</div></div>
+                <div class="stat-item"><div class="stat-value">${result.platforms.length}</div><div class="stat-label">平台数量</div></div>
+                <div class="stat-item"><div class="stat-value">¥${minPrice}</div><div class="stat-label">最低价格</div></div>
+                <div class="stat-item"><div class="stat-value">¥${maxPrice}</div><div class="stat-label">最高价格</div></div>
+            `;
+
+            let trendHtml = '<h4 style="margin-top:20px;color:#333;">各平台价格区间:</h4>';
+            for (const [p, t] of Object.entries(result.price_trend)) {
+                trendHtml += `<div class="trend-item"><div class="trend-platform">${p}</div><div class="trend-price">¥${t.min} ~ ¥${t.max} (均: ¥${t.avg})</div></div>`;
+            }
+            document.getElementById('priceTrend').innerHTML = trendHtml;
+
+            // Charts
+            renderCharts(result);
+
+            // Table
+            const tbody = document.getElementById('productTableBody');
+            tbody.innerHTML = result.products.map((p, i) => `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td>${p.name}</td>
+                    <td><span class="platform-tag">${p.platform}</span></td>
+                    <td><strong>¥${p.price.toLocaleString()}</strong></td>
+                    <td>${p.sales.toLocaleString()}</td>
+                    <td>⭐ ${p.shop_score}</td>
+                    <td>${p.value_score}</td>
+                    <td><span class="badge badge-${p.recommendation === '强烈推荐' ? 'strong' : p.recommendation === '推荐' ? 'recommend' : 'normal'}">${p.recommendation}</span></td>
+                    <td><a href="${p.url}" target="_blank">查看</a></td>
+                </tr>
+            `).join('');
+        }
+
+        function renderCharts(result) {
+            Object.values(charts).forEach(c => c.destroy());
+            charts = {};
+
+            // Price chart
+            const top8 = result.products.slice(0, 8);
+            const priceCtx = document.getElementById('priceChart').getContext('2d');
+            charts.price = new Chart(priceCtx, {
+                type: 'bar',
+                data: {
+                    labels: top8.map(p => p.name.slice(0, 12) + '...'),
+                    datasets: [{
+                        label: '价格(元)',
+                        data: top8.map(p => p.price),
+                        backgroundColor: top8.map(p => p.recommendation === '强烈推荐' ? '#52c41a' : '#1890ff')
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+            });
+
+            // Sales chart
+            const bySales = [...result.products].sort((a, b) => b.sales - a.sales).slice(0, 8);
+            const salesCtx = document.getElementById('salesChart').getContext('2d');
+            charts.sales = new Chart(salesCtx, {
+                type: 'bar',
+                data: {
+                    labels: bySales.map(p => p.name.slice(0, 10) + '...'),
+                    datasets: [{ label: '销量', data: bySales.map(p => p.sales), backgroundColor: '#1890ff' }]
+                },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            // Platform chart
+            const platformCtx = document.getElementById('platformChart').getContext('2d');
+            charts.platform = new Chart(platformCtx, {
+                type: 'bar',
+                data: {
+                    labels: result.platforms,
+                    datasets: [
+                        { label: '平均价格', data: result.platforms.map(p => result.price_trend[p].avg), backgroundColor: '#1890ff' },
+                        { label: '平均评分', data: result.platforms.map(p => {
+                            const pProducts = result.products.filter(pr => pr.platform === p);
+                            return (pProducts.reduce((a, b) => a + parseFloat(b.shop_score), 0) / pProducts.length).toFixed(1);
+                        }), type: 'line', borderColor: '#52c41a', yAxisID: 'y1' }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, position: 'left' }, y1: { beginAtZero: true, max: 5, position: 'right' } } }
+            });
+
+            // Radar chart
+            const radarCtx = document.getElementById('radarChart').getContext('2d');
+            const top5 = result.products.slice(0, 5);
+            charts.radar = new Chart(radarCtx, {
+                type: 'radar',
+                data: {
+                    labels: ["价格优势", "销量表现", "评分高低", "性价比", "推荐指数"],
+                    datasets: top5.map((p, i) => ({
+                        label: p.name.slice(0, 10),
+                        data: [100 - p.price_rank * 5, 100 - p.sales_rank * 5, parseFloat(p.shop_score) * 20, p.value_score, p.value_score],
+                        backgroundColor: `hsla(${i * 72}, 70%, 50%, 0.2)`,
+                        borderColor: `hsla(${i * 72}, 70%, 50%, 1)`
+                    }))
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true, max: 100 } } }
+            });
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').classList.toggle('show', show);
+            document.getElementById('searchBtn').disabled = show;
+        }
+    </script>
+</body>
+</html>
